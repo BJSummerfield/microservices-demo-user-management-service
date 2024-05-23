@@ -2,22 +2,22 @@ services:
   microservices-demo-user-management-service:
     build: .
     ports:
-      - "8001:8000"
+      - "8000:8000"
     depends_on:
       - rabbitmq
-      - microservices-demo-user-management-mongo
+      - microservices-demo-users-mongo
     environment:
-      MONGO_URL: mongodb://microservices-demo-user-management-mongo:27017/userdb
+      MONGO_URL: mongodb://microservices-demo-users-mongo:27017/userdb
       RABBITMQ_URL: amqp://rabbitmq:5672/
 
-  microservices-demo-user-management-mongo:
+  microservices-demo-users-mongo:
     image: mongo:latest
     environment:
       MONGO_INITDB_DATABASE: userdb
     volumes:
       - userdb-data:/data/db
     ports:
-      - "27018:27017"
+      - "27017:27017"
 
   rabbitmq:
     image: rabbitmq:3-management

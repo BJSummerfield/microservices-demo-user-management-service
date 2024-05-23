@@ -36,7 +36,7 @@ function publishEvent(eventType, message) {
 
 app.post('/users', async (req, res) => {
     try {
-        const id = uuidv4();  // Generate a UUID
+        const id = uuidv4();
         const { email } = req.body;
         const user = new User({ id, email });
         await user.save();
