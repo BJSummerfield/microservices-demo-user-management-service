@@ -1,47 +1,23 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const amqp = require('amqplib/callback_api');
 require('dotenv').config();
-const { v4: uuidv4 } = require('uuid');
-const User = require('./models/user');
+const { setupRabbitMQListeners, publishEvent } = require('./events');
+const { createUser, deleteUser, getAllUsers, getUserById } = require('./userOperations');
 
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true, useFindAndModify: false });
-
-const RABBITMQ_URL = process.env.RABBITMQ_URL;
-const EXCHANGE = 'user_events';
-
-function publishEvent(eventType, message) {
-    amqp.connect(RABBITMQ_URL, function(error0, connection) {
-        if (error0) {
-            console.error(`Failed to connect to RabbitMQ: ${error0.message}`);
-            throw error0;
-        }
-        connection.createChannel(function(error1, channel) {
-            if (error1) {
-                console.error(`Failed to create channel in RabbitMQ: ${error1.message}`);
-                throw error1;
-            }
-            channel.assertExchange(EXCHANGE, 'topic', { durable: false });
-            channel.publish(EXCHANGE, eventType, Buffer.from(JSON.stringify(message)));
-            console.log(`Event published: ${eventType}`);
-            setTimeout(() => {
-                connection.close();
-            }, 500);
-        });
-    });
-}
+mongoose.connect(process.env.MONGO_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    useFindAndModify: false
+});
 
 app.post('/users', async (req, res) => {
     try {
-        const id = uuidv4();
         const { email } = req.body;
-        const user = new User({ id, email });
-        await user.save();
-        console.log(`User created: ${JSON.stringify(user)}`);
-        publishEvent('userManagement.userCreated', { id, email });
+        const user = await createUser(email);
+        publishEvent('userCreated', { id: user.id });
         res.status(201).send(user);
     } catch (error) {
         console.error(`Error creating user: ${error.message}`);
@@ -50,28 +26,24 @@ app.post('/users', async (req, res) => {
 });
 
 app.delete('/users/:id', async (req, res) => {
-    const id = req.params.id;
-    console.log(`Attempting to delete user with id: ${id}`);
     try {
-        const user = await User.findOneAndRemove(id);
+        const id = req.params.id;
+        const user = await deleteUser(id);
         if (user) {
-            console.log(`User deleted: ${user}`);
-            publishEvent('userManagement.userDeleted', { id });
+            publishEvent('userDeleted', { id: user.id });
             res.status(200).send(user);
         } else {
-            console.log(`User not found with id: ${id}`);
             res.status(404).send({ error: 'User not found' });
         }
     } catch (error) {
-        console.error(`Error deleting user with ID ${id}: ${error.message}`);
+        console.error(`Error deleting user: ${error.message}`);
         res.status(500).send({ error: 'Internal Server Error' });
     }
 });
 
 app.get('/users', async (_, res) => {
     try {
-        const users = await User.find({});
-        console.log(`Fetched all users: ${users.length} users found`);
+        const users = await getAllUsers();
         res.status(200).send(users);
     } catch (error) {
         console.error(`Error fetching users: ${error.message}`);
@@ -80,22 +52,22 @@ app.get('/users', async (_, res) => {
 });
 
 app.get('/users/:id', async (req, res) => {
-    const id = req.params.id;
-    console.log(`Attempting to fetch user with id: ${id}`);
     try {
-        const user = await User.findOne({ id });
+        const id = req.params?.id;
+        console.log("request to service: ", req.params)
+        const user = await getUserById(id);
         if (user) {
-            console.log(`User found: ${user}`);
             res.status(200).send(user);
         } else {
-            console.log(`User not found with id: ${id}`);
             res.status(404).send({ error: 'User not found' });
         }
     } catch (error) {
-        console.error(`Error fetching user with ID ${id}: ${error.message}`);
+        console.error(`Error fetching user: ${error.message}`);
         res.status(500).send({ error: 'Internal Server Error' });
     }
 });
+
+setupRabbitMQListeners();
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
