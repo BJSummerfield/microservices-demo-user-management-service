@@ -17,7 +17,7 @@ app.post('/users', async (req, res) => {
     try {
         const { email } = req.body;
         const user = await createUser(email);
-        publishEvent('userCreated', { id: user.id });
+        publishEvent('userCreated', { id: user.id, email: user.email });
         res.status(201).send(user);
     } catch (error) {
         console.error(`Error creating user: ${error.message}`);
