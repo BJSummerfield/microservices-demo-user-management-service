@@ -8,7 +8,7 @@ async function createUser(email) {
 }
 
 async function deleteUser(id) {
-    const user = await User.findOneAndRemove(id);
+    const user = await User.findOneAndRemove({ id: id });
     return user;
 }
 
